@@ -10,7 +10,9 @@ code {
 }
 
 pre {
+    display: block;
     text-align: left;
+    border-style: solid;
     border: #E0A000;
     border-width: 1px;
 }
