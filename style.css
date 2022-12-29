@@ -17,3 +17,7 @@ pre {
     border-width: 1px;
     font-size: small;
 }
+
+figcaption {
+    font: 8px monospace;   
+}
