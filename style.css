@@ -19,5 +19,6 @@ pre {
 }
 
 figcaption {
-    font: 8px monospace;   
+    font: 10px monospace;   
+    color: #707070;
 }
