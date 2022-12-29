@@ -1,9 +1,13 @@
 body {
     text-align: center;
     background-color: #E7F0EF;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     padding: 5% 10%;
-    letter-spacing: 10px;
+    letter-spacing: 1px;
+}
+
+code {
+    background-color: #FFFFFF;
 }
 
 pre {
