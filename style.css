@@ -5,14 +5,11 @@ body {
     padding: 5% 10%;
 }
 
-code {
-    background: whitesmoke;
-}
-
 pre {
     display: block;
     text-align: left;
     border-style: solid;
     border-color: #E0A000;
     border-width: 1px;
+    font-size: small;
 }
