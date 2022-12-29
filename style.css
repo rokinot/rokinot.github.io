@@ -6,7 +6,11 @@ body {
 }
 
 code {
-    text-align: start;
-    border: #E0A000;
     background: whitesmoke;
+}
+
+pre {
+    text-align: left;
+    border: #E0A000;
+    border-width: 1px;
 }
