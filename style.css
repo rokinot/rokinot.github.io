@@ -3,3 +3,9 @@ body {
     background-color: #E7F0EF;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
+code {
+    text-align: start;
+    border: #E0A000;
+    background: whitesmoke;
+}
