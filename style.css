@@ -7,8 +7,9 @@ body {
 }
 
 pre {
-    background-color: #cac3b9;
+    background-color: #000000;
     text-align: left;
+    text-color: #FFFFFF;
     border-style: solid;
     border-color: #5b1647;
     border-width: 1px;
