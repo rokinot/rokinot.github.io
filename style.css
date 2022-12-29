@@ -10,6 +10,8 @@ code {
 }
 
 pre {
+    background-origin: border-box;
+    background-clip: border-box;
     display: block;
     text-align: left;
     border-style: solid;
