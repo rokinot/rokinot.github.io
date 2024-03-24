@@ -1,0 +1,29 @@
+<head>
+    <title>time</title>
+    <link rel="stylesheet" href="/style.css">
+    </head>
+    <style>
+    p {
+            text-align: start;
+    }
+            
+    </style>
+    <body>
+    <h2 id="-endtroducing-">Introduction</h2>
+    <p>This piece is based on the follow finding in code4rena's
+    <a href="https://code4rena.com/reports/2023-07-tapioca">tapioca contest</a>
+    </p>
+    <h2 id="-context-">Context</h2>
+    <p>In July 2023, C4 hosted a contest for Tapioca, one of the largest contests in the platform with about 13.5k SLOC to be reviewed. I participated in the contest but only for a short period of time as I had other matters to deal with. I, however, was able to dig one of the most interesting bugs I've ever found.</p>
+    <p>Tapioca operates with 3 particular tokens: TAP, oTAP and twTAP. TAP is the standard token, twTAP is the governance token you can mint by locking TAP, and oTAP is an ERC721 call option which in this context is airdropped to users.</p>
+    <p></p>
+    <h2 id="-the-bug-">The Bug</h2>
+    <p></p>
+    
+    </pre><p>Because of how the impact of the vulnerability differs based on how early you join the system, I coded and submitted 3 different tests. In hindsight, I may have gone a bit too far with such a large PoC. If I were to find this bug again I know for a fact I'd explore but only submit a single, most impactful PoC. A very detailed proof of how this impacted the protocol may have however helped this submission to be selected for report, which is always nice to see. </p>
+    <p>I&#39;m pretty sure the developers at the end chose to go with a minimum deposit threshold, which is to simply force a first deposit to be higher than a certain nominal value. This way the first depositor will always be forced to mint a high amount of shares, keeping the price per share at a healthy amount. The only drawback for this solution is that it doesn&#39;t work with the GUSD stablecoin, which for some reason is an ERC20 with 2 decimals.</p>
+    <p>The proof of concept tests can be found <a href="https://github.com/code-423n4/2023-07-tapioca-findings/issues/187">here</a></p>
+    <p>My submission was selected for report so thats cool; anyway, I wrote this post because I just wanted to talk about time-bound token emissions. </p>
+    <p></p>
+    <a href="index">return</a>
+    </body>
