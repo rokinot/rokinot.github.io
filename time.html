@@ -20,7 +20,7 @@
     <h2 id="-the-bug-">The Bug</h2>
     <p>In order to take part in governance, one must call <code>participate()</code>. Inside this function, there's a check for minimum duration of your lock, and a TAP <code>transferFrom</code> to the contract. <code>_computeMagnitude()</code> is called to calculate a magnitude of your voting power based around your lock duration. The contract then uses this magnitude to calculate a multiplier which is later required to get your final voting power. </p>
     <pre><code>
-        function participate(
+        <span class="hljs-keyword">function</span> <span class="hljs-title">participate(</span>
         address _participant,
         uint256 _amount,
         uint256 _duration
