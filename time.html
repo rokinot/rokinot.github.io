@@ -13,12 +13,39 @@
     <a href="https://code4rena.com/reports/2023-07-tapioca">tapioca contest</a>
     </p>
     <h2 id="-context-">Introduction & Context</h2>
-    <img src="/time.jpeg" width="500" height="600"> <figcaption>You've heard of permanently locked tokens, but have you ever heard about doing it on purpose?</figcaption>
+    <img src="/time.jpeg" alt="univ2solution"> <figcaption>You've heard of permanently locked tokens, but have you ever heard about doing it on purpose?</figcaption>
     <p>In July 2023, C4 hosted a contest for Tapioca, one of the largest contests in the platform with about 13.5k SLOC to be reviewed. I participated in the contest but only for a short period of time as I had other matters to deal with. I, however, was able to dig one of the most interesting bugs I've ever found.</p>
     <p>Tapioca operates with 3 particular tokens: TAP, oTAP and twTAP. TAP is the standard token, twTAP is the governance token you can mint by locking TAP, and oTAP is an ERC721 call option which in this context is airdropped to users.</p>
     <p></p>
     <h2 id="-the-bug-">The Bug</h2>
     <p>In order to take part in governance, one must call <code>participate()</code>. Inside this function, there's a check for minimum duration of your lock, and a TAP <code>transferFrom</code> to the contract. <code>_computeMagnitude()</code> is called to calculate a magnitude of your voting power based around your lock duration. The contract then uses this magnitude to calculate a multiplier which is later required to get your final voting power. </p>
+    <code>
+        function participate(
+        address _participant,
+        uint256 _amount,
+        uint256 _duration
+    ) external returns (uint256 tokenId) {
+        require(_duration >= EPOCH_DURATION, "twTAP: Lock not a week");
+
+        // Transfer TAP to this contract
+        tapOFT.transferFrom(msg.sender, address(this), _amount);
+
+        // Copy to memory
+        TWAMLPool memory pool = twAML;
+
+        uint256 magnitude = computeMagnitude(_duration, pool.cumulative);
+        bool divergenceForce;
+        uint256 multiplier = computeTarget(
+            dMIN,
+            dMAX,
+            magnitude,
+            pool.cumulative
+        );
+        . . .
+        // Save twAML participation
+        // Casts are safe: see struct definition
+        uint256 votes = _amount * multiplier;
+    </code>
     <p>Have you catched the bug yet? Well here it is: there's no upper limit to your lock duration. As a consequence, you may join with a very small amount of tokens but with a lot of duration. Let's use my PoC case where you lock for <code>type(uint56).max - block.timestamp</code> seconds, which is about 2.3 billion years (did you know earth will be uninhabitable in 1.3 billion years? yeah its a lot of time). As a consequence, <code>computeMagnitude()</code> returns a blown up value, and later in the function when the average magnitude is calculated, it will easily surpass the divergence force. Future depositors will have their their target amount be forced to minimum due to how the target is calculated</p>
     <pre><code>    <span class="hljs-keyword">function</span> <span class="hljs-title">computeTarget(</span>
             uint256 _dMin,
