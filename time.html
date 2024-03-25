@@ -15,10 +15,10 @@
     <h2 id="-context-">Introduction & Context</h2>
     <img src="/time.jpeg" alt="univ2solution" width="640" height="360"> <figcaption>You've heard of permanently locked tokens, but have you ever heard about doing it on purpose for an attack?</figcaption>
     <p>In July 2023, C4 hosted a contest for Tapioca, one of the largest contests in the platform with about 13.5k SLOC to be reviewed. I participated in the contest but only for a short period of time as I had other matters to deal with. I, however, was able to dig one of the most interesting bugs I've ever found.</p>
-    <p>Tapioca operates with 3 particular tokens: TAP, oTAP and twTAP. TAP is the standard token, twTAP is the governance token you can mint by locking TAP, and oTAP is an ERC721 call option which in this context is airdropped to users.</p>
+    <p>Tapioca operates with 3 particular tokens: TAP, oTAP and twTAP. TAP is the standard token, twTAP is the time weighted token used for governance you can mint by locking TAP, and oTAP is an ERC721 call option which in this context is airdropped to users. oTAP rewards you with TAP, which is how you mint TAP tokens in the first place. There's no need to stress about oTAP however as only TAP/twTAP are relevant for this writing. The function to lock your TAP exists in the twTAP contract and is explained below.</p>
     <p></p>
-    <h2 id="-the-bug-">The Bug</h2>
-    <p>In order to take part in governance, one must call <code>participate()</code>. Inside this function, there's a check for minimum duration of your lock, and a TAP <code>transferFrom</code> to the contract. <code>_computeMagnitude()</code> is called to calculate a magnitude of your voting power based around your lock duration. The contract then uses this magnitude to calculate a multiplier which is later required to get your final voting power. </p>
+    <h2 id="-the-bug-">The governance entry point</h2>
+    <p>In order to take part in governance, one must call the <code>participate()</code> function in the contract, <a href="https://github.com/Tapioca-DAO/tap-token-audit/blob/main/contracts/governance/twTAP.sol#L252">here</a>. Inside this function, there's a check for minimum duration of your lock, and a TAP <code>transferFrom</code> to the contract. <code>_computeMagnitude()</code> is called to calculate a magnitude of your voting power based around your lock duration. The contract then uses this magnitude to calculate a multiplier which is later required to get your final voting power. </p>
     <pre><code>
         <span class="hljs-keyword">function</span> <span class="hljs-title">participate(</span>
         address _participant,
