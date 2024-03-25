@@ -46,7 +46,7 @@
         // Casts are safe: see struct definition
         uint256 votes = _amount * multiplier;
     </code></pre>
-    <p>Have you catched the bug yet? Well here it is: there's no upper limit to your lock duration. As a consequence, you may join with a very small amount of tokens but with a lot of duration. Let's use my PoC case where you lock for <code>type(uint56).max - block.timestamp</code> seconds, which is about 2.3 billion years (did you know earth will be uninhabitable in 1.3 billion years? yeah its a lot of time). As a consequence, <code>computeMagnitude()</code> returns a blown up value, and later in the function when the average magnitude is calculated, it will easily surpass the divergence force. Future depositors will have their their target amount be forced to minimum due to how the target is calculated</p>
+    <p>Have you caught the bug yet? Well here it is: there's no upper limit to your lock duration. As a consequence, you may join with a very small amount of tokens but with a lot of duration. Let's use my PoC case where you lock for <code>type(uint56).max - block.timestamp</code> seconds, which is about 2.3 billion years (did you know earth will be uninhabitable in 1.3 billion years? yeah its a lot of time). As a consequence, <code>computeMagnitude()</code> returns a blown up value, and later in the function when the average magnitude is calculated, it will easily surpass the divergence force. Future depositors will have their their target amount be forced to minimum due to how the target is calculated</p>
     <pre><code>    <span class="hljs-keyword">function</span> <span class="hljs-title">computeTarget(</span>
             uint256 _dMin,
             uint256 _dMax,
@@ -64,7 +64,7 @@
     
     <p>Because of how the impact of the vulnerability differs based on how early you join the system, I coded and submitted 3 different tests. In hindsight, I went too far with such a large PoC. If I were to find this bug again I know for a fact I'd submit a single, most impactful PoC. A very detailed proof of how this impacted the protocol may have however helped this submission to be selected for report, which is always nice to see. </p>
     <p>The proof of concept tests can be found <a href="https://github.com/code-423n4/2023-07-tapioca-findings/issues/187">here</a></p>
-    <p>My submission was selected for report so thats cool; anyway, I wrote this post because I just wanted to talk about time-bound token emissions. </p>
+    <p>My submission was selected for report so thats cool. anyway, I wanted to make this post for a long time and it was harder then I anticipated. Turns out, its because I procastinated for so long I forgot how it even worked in the first place (oops). </p>
     <p></p>
     <a href="index">return</a>
     </body>
