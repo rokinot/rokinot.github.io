@@ -40,7 +40,7 @@
         // that were in the queue before MIN_WITHDRAWAL_DELAY_BLOCKS.
         uint256 curQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].latest();
         uint256 prevQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].upperLookup({
-            key: uint32(block.number) - MIN_WITHDRAWAL_DELAY_BLOCKS - 1 // BUG IS HERE
+            key: uint32(block.number) - MIN_WITHDRAWAL_DELAY_BLOCKS - 1 // bug is here, summoning 21 days back for a 14 days withdrawal.
         });</code></pre>
     <p>if weaponized, a malicious operator and/or AVS can inflate the number of funds being burned, in order to destroy deposited funds, at the cost of the stake of the operator getting slashed. the attack window is up to the difference between the new withdrawal delay and the previous one, in the example given above, 21 - 14 = 7 days. also the bug only happens if they increase the delay value.</p>
     <p></p>
