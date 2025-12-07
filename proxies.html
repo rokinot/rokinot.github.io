@@ -28,7 +28,7 @@
         <li>then it calculates the shares to slash that are still queued: scaledSharesSlashedFromQueue = (curQueuedScaledShares - prevQueuedScaledShares) * (prevMax - newMax) / 1e18 This should be slashing the 100 shares in the queue, but thanks to the new WITHDRAWAL_DELAY, it compares the current total cumulative shares in queue, 600, to the one 21 days prior, on the 9th, which was zero. The shares slashed from queue is calculated as 600 shares instead of 100.</li>
         <li>the operator is slashed, but the amount of shares burned are larger than whats in the queue. This excess loss is paid by the other operators in the system.</li>
     </ol>
-    <pre><code><span class="hljs-keyword">function</span> <span class="hljs-title">_getSlashableSharesInQueue(</span>
+    <pre><code class="js"><span class="hljs-keyword">function</span> <span class="hljs-title">_getSlashableSharesInQueue(</span>
         address operator,
         IStrategy strategy,
         uint64 prevMaxMagnitude,
@@ -46,7 +46,7 @@
     <p></p>
     <h2 id="-context-">Lesson</h2>
     <p>this article, unlike the other ones, has a sad ending. Back then I didn't knew platform rules straight up ruled out future upgrades oops. But the sponsor thought it was a high value finding and the judges felt it wasn't fair to invalidate it. So a low it is <s>or maybe a high on a different platform</s>, but its a damn good bug I say!</p>
-    <p>if you wanna take away something from this, know that appearences can fool you. they (the devs) will write variables as constants, write variables as immutables, but inside a proxy you can just do whatever you want. this is why i said earlier its counterintuitive. also, for your consideration, maaaaybe this bug wouldn't be invalid for a bug bounty? especially if a protocol has plans to go through an upgrade? i personally think this would be too much effort but whenevr there's a big governance upgrade you think will pass, you audit their code to catch stuff like this. iirc compound spawned a bug out of bad upgrade last year. keep your eyes sharp out there anon</p>
+    <p>if you wanna take away something from this, know that appearences can fool you. they (the devs) will write variables as constants, write variables as immutables, but inside a proxy you can just do whatever you want. this is why i said earlier its counterintuitive. also, for your consideration, maaaaybe this bug wouldn't be invalid for a bug bounty? especially if a protocol has plans to go through an upgrade? i personally think this would be too much effort but whenevr there's a big governance upgrade you think will pass, you audit their code to catch stuff like this. iirc compound spawned a bug out of bad upgrade last year. stay sharp out there</p>
     <p></p>
     <a href="index">return</a>
     </body>
