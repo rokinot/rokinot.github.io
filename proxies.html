@@ -23,10 +23,10 @@
         <li>on the 15th day, an operator queues 500 of their 1000 shares, scheduled to leave on the 29th.</li>
         <li>on the 25th day, the same operator queues another 100.</li>
         <li>on the 29th day, the operator finishes the first withdrawal and gets 500 shares back.</li>
-        <li>on the 30th day, after the proposal is live, the operator misbehaves on purpose. How they do it doesn't matter. The AVS then fully (works partially too) slashes their shares as punishment, and so they'll call slashOperator() in AllocationManager.sol, where it calls slashOperatorShares() in DelegationManager.sol.</li>
-        <li>inside this function, it calculates shares slashed = operator's shares - operator's shares * newMag / prevMag which results in 400 shares. This part is correct.</li>
-        <li>then it calculates the shares to slash that are still queued: <mark>scaledSharesSlashedFromQueue = (curQueuedScaledShares - prevQueuedScaledShares) * (prevMax - newMax) / 1e18</mark> This should be slashing the 100 shares in the queue, but thanks to the new WITHDRAWAL_DELAY, it compares the current total cumulative shares in queue, 600, to the one 21 days prior, on the 9th, which was zero. The shares slashed from queue is calculated as 600 shares instead of 100.</li>
-        <li>the operator is slashed, but the amount of shares burned are larger than whats in the queue. This excess loss is paid by the other operators in the system.</li>
+        <li>on the 30th day, after the proposal is live, the operator misbehaves on purpose. How they do it doesn't matter. the AVS then fully (works partially too) slashes their shares as punishment, and so they'll call slashOperator() in AllocationManager.sol, where it calls slashOperatorShares() in DelegationManager.sol.</li>
+        <li>inside this function, it calculates shares slashed = operator's shares - operator's shares * newMag / prevMag which results in 400 shares. all good so far.</li>
+        <li>then it calculates the shares to slash that are still queued: scaledSharesSlashedFromQueue = (curQueuedScaledShares - prevQueuedScaledShares) * (prevMax - newMax) / 1e18. this should be slashing the 100 shares in the queue, but thanks to the new WITHDRAWAL_DELAY, it compares the current total cumulative shares in queue, 600, to the one 21 days prior, on the 9th, which was zero. the shares slashed from queue is calculated as 600 shares instead of 100.</li>
+        <li>the operator is slashed, but the amount of shares burned are larger than whats in the queue. this excess loss is paid by the other operators in the system.</li>
     </ol>
     <pre><code class="js"><span class="hljs-keyword">function</span> <span class="hljs-title">_getSlashableSharesInQueue(</span>
         address operator,
