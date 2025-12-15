@@ -21,7 +21,6 @@
     <p>However, this is what that looks like when the reserves are off reference (its at least the 2nd swap of the block): </p>
     <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
     <p>By simulating the fee growth on a notebook, I was able to see that the transition point is not achieved at 4000 BIPS but much lower instead. </p>
-    <p>let's assume the governance proposal to increase the delay from 14 to 21 days passes and its scheduled to go live on the 30th day of the month.</p>
     <pre><code> 
         uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
     </code></pre>
@@ -38,22 +37,50 @@
     <p>For the 2nd swap onwards, the fee function is NOT linear. This not only breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
     <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
     <pre><code> 
-        if (
-        (currentReserve &lt; referenceReserve &amp;&amp; currentReserve &lt;= _getQuadraticToLinearTransitionPoint(
-            input,
-            referenceReserve
-        )) || (currentReserve &gt; referenceReserve &amp;&amp; currentReserve &gt;= _getQuadraticToLinearTransitionPoint(input, referenceReserve))
-    ) {
-            // Linear fee calculation
-        } else {
-            // Quadratic fee calculation
-        }
+                } else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+            // This swap passes beyond the max quadratic fee
+            fee = MAX_QUADRATIC_FEE_PERCENT_BIPS
+                * (
+                    TWO_Q64
+                        - Convert.mulDiv(
+                            referenceReserve,
+                            MAX_QUADRATIC_FEE_Q64,
+                            N * (input + 2 * (currentReserve - referenceReserve)),
+                            false
+                        )
+                );
     </code></pre>
-    <p>This works for the 1st swap because current reserves = reference reserves. For the case currentReserve < referenceReserve, the code charges 0.1 BIPS fee. But for the case currentReserve > referenceReserve, what this if block is doing is checking whether we surpassed the threshold using the input and the current state of the reserve. .</p>
-    <p>Lets give an example. If current reserve is at 150 ETH and reference reserve is at 100 ETH, the amount required to enter the linear range is 150 ETH. But the if block calculates input (150) + current reserves (50), so it thinks the input needs another 100 ETH to reach that.  </p>
+    <p>This works for the 1st swap because current reserves = reference reserves. But for the case currentReserve > referenceReserve, what this if block is doing is checking whether we surpassed the threshold using the input and the current state of the reserve.</p>
+    <p>To find out mathematically when is it necessary for the code to enter this block, we need to find the input that returns 4000 BIPS. Looking at the code, this happens at MAX_QUADRATIC_FEE_PERCENT_BIPS * 1, since this constant equals 4000. Assume currentReserve = 1.1e18, referenceReserve = 1e18 and N=20. To reach this value, the mulDiv block must be equal to one, which means the division must be equal for the divisor and dividend.</p>
+    <p>This gives us the equation: 1 = (referenceReserve * MAX_QUADRATIC_FEE_Q64) / (N * (input + 2 * (currentReserve - referenceReserve)))</p>
+    <p>Since MAX_QUADRATIC_FEE_Q64 is 40 in Q64, we can remove both this term and N</p>
+    <p>1 = (referenceReserve * 40) / (20 * (input + 2 * (currentReserve - referenceReserve)))</p>
+    <p>Solving the equation gives us: </p>
+    <p>input + 2 * (currentReserve - referenceReserve) = (referenceReserve * 2)</p>
+    <p>In terms of LINEAR_START_REFERENCE_SCALER, since that equal 3, we get:</p>
+    <p>input + 2 * currentReserve - referenceReserve = 3 * referenceReserve</p>
+    <p>Or input + (currentReserve - referenceReserve) + currentReserve =  as I've put it in the contest. The current code is missing the second term of the equation, as a result it leaves the quadratic area too late and causes the discontinuity. The fix is to switch to the correct formula. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
+    <img src="/ammalgamfixed.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original</figcaption>
+    <h2 id="-extra-">Extra</h2>
+    <p>Since I had plenty of code available, I decided to run an invariant check. Is it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the function at any point has returned a result lower than 0.1. As it turns out, the invariant was broken.</p>
+    <pre><code>
+            if (input + currentReserve > referenceReserve) {
+                // the input moves from the current reserve past the starting reserve, we charge a
+                // weighted fee based on how far past the starting reserve we are
+                uint256 pastBy = input + currentReserve - referenceReserve;
+                if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+                    ...
+                } else {
+                    // this fee is still in the quadratic range
+                    fee = Convert.mulDiv(N_TIMES_BIPS_Q64_PER_PERCENT, pastBy, referenceReserve, false);
+                }
+                fee = Convert.mulDiv(fee, pastBy, input, false);
+    </code></pre>
+    <p>This is the portion of the code that goes from minimum to quadratic. The problem here is that if the reference is too close to current reserve, pastBy will be ~ input. If the input is small enough, the fee calculation inside the else block rounds to zero, and the fee rounds to zero as well.</p>
+    <img src="/ammalgaminvariant.png" alt="ammalgaminvariant" width="640" height="360"> <figcaption>Invariant broken</figcaption>
+    <p>This can be fixed by adding a minimum fee check after the fee calculation, if fee < 0.1 BIPS, fee = 0.1 BIPS.</p>
     <h2 id="-context-">Lesson</h2>
-    <p>this article, unlike the other ones, has a sad ending. Back then I didn't knew platform rules straight up ruled out future upgrades oops. But the sponsor thought it was a high value finding and the judges felt it wasn't fair to invalidate it. So a low it is <s>or maybe a high on a different platform</s>, but its a damn good bug I say!</p>
-    <p>if you wanna take away something from this, know that appearences can fool you. they (the devs) will write variables as constants, write variables as immutables, but inside a proxy you can just do whatever you want. this is why i said earlier its counterintuitive. also, for your consideration, maaaaybe this bug wouldn't be invalid for a bug bounty? especially if a protocol has plans to go through an upgrade? i personally think this would be too much effort but whenevr there's a big governance upgrade you think will pass, you audit their code to catch stuff like this. iirc compound spawned a bug out of bad upgrade last year. keep your eyes sharp out there anon</p>
+    <p>The incorrect quadratic formula bug was a solo medium, my first one in cantina, and the extra bug had a single duplicate. The alpha here is that a lot of SRs are either skipping or not fully understanding complex mathematical equations, leaving plenty of opportunities on the table. But if you read this article carefully, you'll notice that I don't actually had to run the numbers inside the equation to find the bug. Instead, all I had to do was convert the function to python and analyze it with custom parameters. This is a practice I've added to my auditing method when dealing with heavy mathematics, or functions with excessive amounts of branch pathing. Many veteran auditors deal with these situations in their own way, <a href="https://x.com/jack__sanford/status/1998003375070142902">phil uses a spreadsheet, 0x52 keeps in his head somehow</a>. Regardless, you need to have a plan of action for these occasions, unless you wanna be left behind.</p>
     <p></p>
     <a href="index">return</a>
     </body>
