@@ -16,15 +16,15 @@
     </p>
     <h2 id="-context-">Context</h2>
     <p>Ammalgam is both an AMM and a lending protocol. The idea is they use the same liquidity for both, which allows for higher yield for LPs. In order to not break everything, they have to keep track of a usage rate. Whenever the rate is too high, swaps are charged are significantly higher fee.</p>
-    <p>Imagine a pool with 100 ETH and 200k USDC, and in a single block most of the ETH was sold for USDC. To prevent market manipulation (MEV, flash swaps, gigadumping shitcoins, etc) they keep track of the reserve variable, updated every block, and charge a fee based on how far away your swap will leave the pool. They use 3 calculations to charge the fee depending on the state of the reserves. </p>
-    <p>If your swap brings the current reserves back to reference, you are charged the lowest fee allowed, 0.1 BIPS. If you're swapping away from the reserve, you are charged a complex quadratic equation up to 4000 BIPS. Past this point you reach the final level, where the fee growth becomes linear instead. </p>
+    <p>Imagine a pool with 100 ETH and 200k USDC, and in a single block most of the ETH was sold for USDC. To prevent market manipulation (MEV, flash swaps, gigadumping shitcoins, etc) they set the reserves at the start of the block as reference, and charge a fee based on how far from them your swap will leave the pool. They use 3 calculations to charge the fee depending on the state of the reserves. </p>
+    <p>If your swap brings the current reserves back to reference, you are charged the lowest fee allowed, 0.1 BIPS. If you're swapping away from the reserves, you are charged a complex quadratic equation up to 4000 BIPS. Past this point you reach the final level, where the fee growth becomes linear and you're charged > 4000. </p>
     <h2 id="-the-bug-">Bug</h2>
-    <p>This image shows the base case: First swap in a pool, selling ETH for USDC. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
+    <p>This graph shows the base case: First swap in a pool, selling ETH for USDC. The X axis is the size of the input, and the Y axis the fee in BIPS. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
     <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st case</figcaption>
     <p>However, this is what it looks like when the reserves are off reference, for the 2nd swap in a block onwards: </p>
     <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
-    <p>To find this, I took the fee calculation below and converted to python. Then by changing some parameters, I was able to see that the transition point is not achieved at 4000 BIPS, but much later instead.</p>
-    <p>But when I was writing the PoC for the bug, the numbers were completely off. I was getting seemingly random numbers for </p>
+    <p>To find this, I took the fee calculation below and converted to python. Then by changing some parameters and plotting, I was able to visualize that the transition point is not achieved at 4000 BIPS, but much later instead.</p>
+    <p>But when I was writing the PoC for the bug, the numbers were completely off. This is when I found out the first issue:</p>
     <pre><code> 
         uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
     </code></pre>
@@ -35,10 +35,10 @@
         uint256 currentReserve
     ) internal pure returns (uint256 fee) {
     </code></pre>
-    <p>The order of the parameters are wrong, this is why the graphics were so weird and why my PoCs were giving my nightmares. This was the 1st submitted bug, very simple, had 11 duplicates, took 10 minutes to write that report. An AI could easily have found this.</p>
+    <p>The order of the parameters are wrong, this is why the graphics were so off (I thought) and why my PoCs were giving my nightmares. This was the 1st submitted bug, very simple, had 11 duplicates, took 10 minutes to write that report. An AI could easily have found this.</p>
     <p>Knowing this bug, we go back to the notebook and pass the *correct* parameters instead. We now see what the real bug looks like:</p>
     <img src="/ammalgam2real.png" alt="ammalgam22" width="640" height="360"> <figcaption>2nd swap, correct parameters</figcaption>
-    <p>For the 2nd swap onwards, the fee function is NOT linear. This not only breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
+    <p>For the 2nd swap onwards, the fee function is NOT continuous. This breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
     <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
     <pre><code>...
 } else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
@@ -63,9 +63,9 @@
     <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
     <p>$$input + (currentReserve - referenceReserve) + referenceReserve = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
     <p>Which is different from the condition in the code. The current code is missing the second term, which causes it to enter the linear equation too late creating the discontinuity. The fix is to use the correct if comparison. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
-    <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original. In blue, the original. In orange, the linear formula applied at all BIPS. In green, the correct one.</figcaption>
+    <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original. In blue, the original. In orange, the linear formula applied at all BIPS. In green, the correct one. The red line highlights where the current code switches to linear.</figcaption>
     <h2 id="-extra-">Extra</h2>
-    <p>Since I had plenty of code available, I decided to run an invariant check. Is it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the function at any point has returned a result lower than 0.1. As it turns out, the invariant was broken.</p>
+    <p>Since I had a pretty good notebook setup already, I decided to run an invariant check. Was it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the graph at any point has reached a BIPS lower than 0.1. As it turns out, the invariant was broken.</p>
     <pre><code>
             if (input + currentReserve > referenceReserve) {
                 // the input moves from the current reserve past the starting reserve, we charge a
@@ -87,6 +87,7 @@
     <p></p>
     <a href="index">return</a>
     </body>
+
 
 
 
