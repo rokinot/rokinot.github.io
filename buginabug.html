@@ -105,8 +105,8 @@
     <p>Solving for the denominator gives us:</p>
     <p>$$input + 2 \times (currentReserve - referenceReserve) = referenceReserve \times 2$$</p>
     <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
-    <p>$$input + (currentReserve - referenceReserve) + referenceReserve </p>
-    <p>    = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
+    <p>$$input + (currentReserve - referenceReserve) + referenceReserve$$</p>
+    <p>$$    = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
     <p>Which is different from the condition in the code. The current code is missing the second term, which causes it to enter the linear equation too late creating the discontinuity. The fix is to use the correct if comparison. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
     <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original. In blue, the original. In orange, the linear formula applied at all BIPS. In green, the correct one. The red line highlights where the current code switches to linear.</figcaption>
     <h2 id="-extra-">Extra</h2>
@@ -133,6 +133,7 @@
     <p></p>
     <a href="index">return</a>
     </body>
+
 
 
 
