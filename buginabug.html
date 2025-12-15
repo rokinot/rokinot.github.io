@@ -20,24 +20,37 @@
     <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st case</figcaption>
     <p>However, this is what that looks like when the reserves are off reference (its at least the 2nd swap of the block): </p>
     <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
-    <p>By simulating the fee growth on a notebook, I was able to see that the fee function is not continuous, hence the invariant is broken. We have not found the bug just yet though, because we don't know why this happens. There are 2 issues: the quadratic growth goes past 4000 BIPS, and the linear </p>
+    <p>By simulating the fee growth on a notebook, I was able to see that the transition point is not achieved at 4000 BIPS but much lower instead. </p>
     <p>let's assume the governance proposal to increase the delay from 14 to 21 days passes and its scheduled to go live on the 30th day of the month.</p>
-    <pre><code><span class="hljs-keyword">function</span> <span class="hljs-title">_getSlashableSharesInQueue(</span>
-        address operator,
-        IStrategy strategy,
-        uint64 prevMaxMagnitude,
-        uint64 newMaxMagnitude
-    ) internal view returns (uint256) {
-        // We want ALL shares added to the withdrawal queue in the window [block.number - MIN_WITHDRAWAL_DELAY_BLOCKS, block.number]
-        //
-        // To get this, we take the current shares in the withdrawal queue and subtract the number of shares
-        // that were in the queue before MIN_WITHDRAWAL_DELAY_BLOCKS.
-        uint256 curQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].latest();
-        uint256 prevQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].upperLookup({
-            key: uint32(block.number) - MIN_WITHDRAWAL_DELAY_BLOCKS - 1
-        });</code></pre>
-    <p>if weaponized, a malicious operator and/or AVS can inflate the number of funds being burned, in order to destroy deposited funds, at the cost of the stake of the operator getting slashed. the attack window is up to the difference between the new withdrawal delay and the previous one, in the example given above, 21 - 14 = 7 days. also the bug only happens if they increase the delay value.</p>
-    <p></p>
+    <pre><code> 
+        uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
+    </code></pre>
+    <pre><code> 
+        function calculateSwapFeeBipsQ64(
+        uint256 input,
+        uint256 referenceReserve,
+        uint256 currentReserve
+    ) internal pure returns (uint256 fee) {
+    </code></pre>
+    <p>The order of the parameters are wrong, this is why the graphics were so weird and why my PoCs were giving my nightmares. This was the 1st bug to submit, very simple, had 11 duplicates, took 10 minutes to write that report.</p>
+    <p>Knowing this bug, we go back to the notebook and pass the *correct* parameters. We now see what the real bug looks like:</p>
+    <img src="/ammalgam2real.png" alt="ammalgam22" width="640" height="360"> <figcaption>2nd swap, correct parameters</figcaption>
+    <p>For the 2nd swap onwards, the fee function is NOT linear. This not only breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
+    <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
+    <pre><code> 
+        if (
+        (currentReserve &lt; referenceReserve &amp;&amp; currentReserve &lt;= _getQuadraticToLinearTransitionPoint(
+            input,
+            referenceReserve
+        )) || (currentReserve &gt; referenceReserve &amp;&amp; currentReserve &gt;= _getQuadraticToLinearTransitionPoint(input, referenceReserve))
+    ) {
+            // Linear fee calculation
+        } else {
+            // Quadratic fee calculation
+        }
+    </code></pre>
+    <p>This works for the 1st swap because current reserves = reference reserves. For the case currentReserve < referenceReserve, the code charges 0.1 BIPS fee. But for the case currentReserve > referenceReserve, what this if block is doing is checking whether we surpassed the threshold using the input and the current state of the reserve. .</p>
+    <p>Lets give an example. If current reserve is at 150 ETH and reference reserve is at 100 ETH, the amount required to enter the linear range is 150 ETH. But the if block calculates input (150) + current reserves (50), so it thinks the input needs another 100 ETH to reach that.  </p>
     <h2 id="-context-">Lesson</h2>
     <p>this article, unlike the other ones, has a sad ending. Back then I didn't knew platform rules straight up ruled out future upgrades oops. But the sponsor thought it was a high value finding and the judges felt it wasn't fair to invalidate it. So a low it is <s>or maybe a high on a different platform</s>, but its a damn good bug I say!</p>
     <p>if you wanna take away something from this, know that appearences can fool you. they (the devs) will write variables as constants, write variables as immutables, but inside a proxy you can just do whatever you want. this is why i said earlier its counterintuitive. also, for your consideration, maaaaybe this bug wouldn't be invalid for a bug bounty? especially if a protocol has plans to go through an upgrade? i personally think this would be too much effort but whenevr there's a big governance upgrade you think will pass, you audit their code to catch stuff like this. iirc compound spawned a bug out of bad upgrade last year. keep your eyes sharp out there anon</p>
