@@ -1,6 +1,8 @@
 <head>
     <title>bug inside a bug inside a bug</title>
     <link rel="stylesheet" href="/style.css">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </head>
     <style>
     p {
@@ -36,30 +38,29 @@
     <img src="/ammalgam2real.png" alt="ammalgam22" width="640" height="360"> <figcaption>2nd swap, correct parameters</figcaption>
     <p>For the 2nd swap onwards, the fee function is NOT linear. This not only breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
     <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
-    <pre><code> 
-                } else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
-            // This swap passes beyond the max quadratic fee
-            fee = MAX_QUADRATIC_FEE_PERCENT_BIPS
-                * (
-                    TWO_Q64
-                        - Convert.mulDiv(
-                            referenceReserve,
-                            MAX_QUADRATIC_FEE_Q64,
-                            N * (input + 2 * (currentReserve - referenceReserve)),
-                            false
-                        )
-                );
-    </code></pre>
-    <p>This works for the 1st swap because current reserves = reference reserves. But for the case currentReserve > referenceReserve, what this if block is doing is checking whether we surpassed the threshold using the input and the current state of the reserve.</p>
-    <p>To find out mathematically when is it necessary for the code to enter this block, we need to find the input that returns 4000 BIPS. Looking at the code, this happens at MAX_QUADRATIC_FEE_PERCENT_BIPS * 1, since this constant equals 4000. Assume currentReserve = 1.1e18, referenceReserve = 1e18 and N=20. To reach this value, the mulDiv block must be equal to one, which means the division must be equal for the divisor and dividend.</p>
-    <p>This gives us the equation: 1 = (referenceReserve * MAX_QUADRATIC_FEE_Q64) / (N * (input + 2 * (currentReserve - referenceReserve)))</p>
-    <p>Since MAX_QUADRATIC_FEE_Q64 is 40 in Q64, we can remove both this term and N</p>
-    <p>1 = (referenceReserve * 40) / (20 * (input + 2 * (currentReserve - referenceReserve)))</p>
-    <p>Solving the equation gives us: </p>
-    <p>input + 2 * (currentReserve - referenceReserve) = (referenceReserve * 2)</p>
-    <p>In terms of LINEAR_START_REFERENCE_SCALER, since that equal 3, we get:</p>
-    <p>input + 2 * currentReserve - referenceReserve = 3 * referenceReserve</p>
-    <p>Or input + (currentReserve - referenceReserve) + currentReserve =  as I've put it in the contest. The current code is missing the second term of the equation, as a result it leaves the quadratic area too late and causes the discontinuity. The fix is to switch to the correct formula. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
+    <pre><code>...
+} else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+    // This swap passes beyond the max quadratic fee
+    fee = MAX_QUADRATIC_FEE_PERCENT_BIPS * (
+        TWO_Q64 - Convert.mulDiv(
+                referenceReserve,
+                MAX_QUADRATIC_FEE_Q64,
+                N * (input + 2 * (currentReserve - referenceReserve)),
+                false
+            )
+    );
+...</code></pre>
+    <p>This works for the 1st swap because \(currentReserve = referenceReserve\). But for the case where \(currentReserve > referenceReserve\), this `if` block is checking whether we surpassed the threshold using the `input` and the current state of the reserve.</p>
+    <p>To find out mathematically when the code should enter this block, we need to find the `input` that returns 4000 BIPS. This happens when the fee is `MAX_QUADRATIC_FEE_PERCENT_BIPS * 1`. Assume \(currentReserve = 1.1 \times 10^{18}\), \(referenceReserve = 1 \times 10^{18}\), and \(N=20\). To reach this value, the `mulDiv` block must be equal to one, which means the dividend and divisor must be equal.</p>
+    <p>This gives us the equation:</p>
+    <p>$$1 = \frac{referenceReserve \times MAX\_QUADRATIC\_FEE\_Q64}{N \times (input + 2 \times (currentReserve - referenceReserve))}$$</p>
+    <p>Since \(MAX\_QUADRATIC\_FEE\_Q64\) is 40 in Q64, we can simplify the constants:</p>
+    <p>$$1 = \frac{referenceReserve \times 40}{20 \times (input + 2 \times (currentReserve - referenceReserve))}$$</p>
+    <p>Solving for the denominator gives us:</p>
+    <p>$$input + 2 \times (currentReserve - referenceReserve) = referenceReserve \times 2$$</p>
+    <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
+    <p>$$input + 2 \times currentReserve - 2 \times referenceReserve = 2 \times referenceReserve$$</p>
+    <p>Which is different from the condition in the code. The current code is missing a term, which causes it to leave the quadratic area too late and creates the discontinuity. The fix is to use the correct formula. Below I show a graph comparing the original formula and the fixed one; notice that the function becomes much smoother.</p>
     <img src="/ammalgamfixed.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original</figcaption>
     <h2 id="-extra-">Extra</h2>
     <p>Since I had plenty of code available, I decided to run an invariant check. Is it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the function at any point has returned a result lower than 0.1. As it turns out, the invariant was broken.</p>
