@@ -1,0 +1,46 @@
+<head>
+    <title>bug inside a bug inside a bug</title>
+    <link rel="stylesheet" href="/style.css">
+    </head>
+    <style>
+    p {
+            text-align: start;
+    }
+            
+    </style>
+    <body>
+    <p>find the competition
+    <a href="http://cantina.xyz/competitions/02c29467-cb27-4beb-b2ef-500ad95e1a51">here</a>
+    </p>
+    <h2 id="-context-">Context</h2>
+    <p>Ammalgam is both an AMM and a lending protocol. The idea is they use the same liquidity for both, which allows for higher yield for LPs. In order to not break everything, they have to keep track of a usage rate. Whenever the rate is too high, swaps are charged are significantly higher fee.</p>
+    <p>Imagine a pool with 100 ETH and 200k USDC, and in a single block most of the ETH was sold for USDC. To prevent market manipulation (MEV, flash swaps, gigadumping shitcoins, etc) they keep track of the reserve variable, updated every block, and charge a fee based on how far away your swap will leave the pool. They use 3 calculations to charge the fee depending on the state of the reserves. If your swap brings the current reserves back to reference, you are charged the lowest fee allowed, 0.1 BIPS. If you're swapping away from the reserve, you are charged a complex quadratic equation up to 4000 BIPS. Past this point you reach the final level, where the fee growth becomes linear instead. </p>
+    <h2 id="-the-bug-">Bug</h2>
+    <p>This image shows the base case: First swap in a pool, selling ETH for USDC. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
+    <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st case</figcaption>
+    <p>However, this is what that looks like when the reserves are off reference (its at least the 2nd swap of the block): </p>
+    <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
+    <p>By simulating the fee growth on a notebook, I was able to see that the fee function is not continuous, hence the invariant is broken. We have not found the bug just yet though, because we don't know why this happens. There are 2 issues: the quadratic growth goes past 4000 BIPS, and the linear </p>
+    <p>let's assume the governance proposal to increase the delay from 14 to 21 days passes and its scheduled to go live on the 30th day of the month.</p>
+    <pre><code><span class="hljs-keyword">function</span> <span class="hljs-title">_getSlashableSharesInQueue(</span>
+        address operator,
+        IStrategy strategy,
+        uint64 prevMaxMagnitude,
+        uint64 newMaxMagnitude
+    ) internal view returns (uint256) {
+        // We want ALL shares added to the withdrawal queue in the window [block.number - MIN_WITHDRAWAL_DELAY_BLOCKS, block.number]
+        //
+        // To get this, we take the current shares in the withdrawal queue and subtract the number of shares
+        // that were in the queue before MIN_WITHDRAWAL_DELAY_BLOCKS.
+        uint256 curQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].latest();
+        uint256 prevQueuedScaledShares = _cumulativeScaledSharesHistory[operator][strategy].upperLookup({
+            key: uint32(block.number) - MIN_WITHDRAWAL_DELAY_BLOCKS - 1
+        });</code></pre>
+    <p>if weaponized, a malicious operator and/or AVS can inflate the number of funds being burned, in order to destroy deposited funds, at the cost of the stake of the operator getting slashed. the attack window is up to the difference between the new withdrawal delay and the previous one, in the example given above, 21 - 14 = 7 days. also the bug only happens if they increase the delay value.</p>
+    <p></p>
+    <h2 id="-context-">Lesson</h2>
+    <p>this article, unlike the other ones, has a sad ending. Back then I didn't knew platform rules straight up ruled out future upgrades oops. But the sponsor thought it was a high value finding and the judges felt it wasn't fair to invalidate it. So a low it is <s>or maybe a high on a different platform</s>, but its a damn good bug I say!</p>
+    <p>if you wanna take away something from this, know that appearences can fool you. they (the devs) will write variables as constants, write variables as immutables, but inside a proxy you can just do whatever you want. this is why i said earlier its counterintuitive. also, for your consideration, maaaaybe this bug wouldn't be invalid for a bug bounty? especially if a protocol has plans to go through an upgrade? i personally think this would be too much effort but whenevr there's a big governance upgrade you think will pass, you audit their code to catch stuff like this. iirc compound spawned a bug out of bad upgrade last year. keep your eyes sharp out there anon</p>
+    <p></p>
+    <a href="index">return</a>
+    </body>
