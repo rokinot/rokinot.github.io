@@ -61,7 +61,7 @@
     <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
     <p>$$input + 2 \times currentReserve - 2 \times referenceReserve = 2 \times referenceReserve$$</p>
     <p>Which is different from the condition in the code. The current code is missing a term, which causes it to leave the quadratic area too late and creates the discontinuity. The fix is to use the correct formula. Below I show a graph comparing the original formula and the fixed one; notice that the function becomes much smoother.</p>
-    <img src="/ammalgamfixed.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original</figcaption>
+    <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original</figcaption>
     <h2 id="-extra-">Extra</h2>
     <p>Since I had plenty of code available, I decided to run an invariant check. Is it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the function at any point has returned a result lower than 0.1. As it turns out, the invariant was broken.</p>
     <pre><code>
@@ -85,3 +85,4 @@
     <p></p>
     <a href="index">return</a>
     </body>
+
