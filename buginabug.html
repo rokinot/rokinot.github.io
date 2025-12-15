@@ -20,13 +20,13 @@
     <p>If your swap brings the current reserves back to reference, you are charged the lowest fee allowed, 0.1 BIPS. If you're swapping away from the reserves, you are charged a complex quadratic equation up to 4000 BIPS. Past this point you reach the final level, where the fee growth becomes linear and you're charged > 4000. </p>
     <h2 id="-the-bug-">Bug</h2>
     <p>This graph shows the base case: First swap in a pool, selling ETH for USDC. The X axis is the size of the input, and the Y axis the fee in BIPS. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
-    <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st case</figcaption>
+    <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st swap</figcaption>
     <p>However, this is what it looks like when the reserves are off reference, for the 2nd swap in a block onwards: </p>
     <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
-    <p>To find this, I took the fee calculation below and converted to python. Then by changing some parameters and plotting, I was able to visualize that the transition point is not achieved at 4000 BIPS, but much later instead.</p>
-    <p>But when I was writing the PoC for the bug, the numbers were completely off. This is when I found out the first issue:</p>
+    <p>To find this, I took the fee calculation below and converted to python. Then by changing some parameters and plotting, I was able to visualize that the transition point is not achieved at 4000 BIPS, but much later instead. All the plots you're in this post were made in that notebook.</p>
+    <p>But when I was writing the PoC for the bug, when comparing the fee charged in a swap vs the pure function, the numbers were completely off. This is when I found out the first issue:</p>
     <pre><code> 
-        uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
+    uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
     </code></pre>
     <pre><code> 
     function calculateSwapFeeBipsQ64(
@@ -35,8 +35,8 @@
         uint256 currentReserve
     ) internal pure returns (uint256 fee) {
     </code></pre>
-    <p>The order of the parameters are wrong, this is why the graphics were so off (I thought) and why my PoCs were giving my nightmares. This was the 1st submitted bug, very simple, had 11 duplicates, took 10 minutes to write that report. An AI could easily have found this.</p>
-    <p>Knowing this bug, we go back to the notebook and pass the *correct* parameters instead. We now see what the real bug looks like:</p>
+    <p>The order of the parameters are wrong, this is why the graphics were so off (I thought) and why my PoCs were giving me nightmares. This was the 1st submitted bug, very simple, had 11 duplicates, took 10 minutes to write that report. An AI could easily have found this.</p>
+    <p>Knowing this bug, we go back to the notebook and pass the *correct* parameters instead. We now see the issue remains, but get a glimpse of what the real bug looks like:</p>
     <img src="/ammalgam2real.png" alt="ammalgam22" width="640" height="360"> <figcaption>2nd swap, correct parameters</figcaption>
     <p>For the 2nd swap onwards, the fee function is NOT continuous. This breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
     <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
@@ -61,7 +61,8 @@
     <p>Solving for the denominator gives us:</p>
     <p>$$input + 2 \times (currentReserve - referenceReserve) = referenceReserve \times 2$$</p>
     <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
-    <p>$$input + (currentReserve - referenceReserve) + referenceReserve = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
+    <p>$$input + (currentReserve - referenceReserve) + referenceReserve </p>
+    <p>    = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
     <p>Which is different from the condition in the code. The current code is missing the second term, which causes it to enter the linear equation too late creating the discontinuity. The fix is to use the correct if comparison. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
     <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original. In blue, the original. In orange, the linear formula applied at all BIPS. In green, the correct one. The red line highlights where the current code switches to linear.</figcaption>
     <h2 id="-extra-">Extra</h2>
@@ -83,10 +84,12 @@
     <img src="/ammalgaminvariant.png" alt="ammalgaminvariant" width="640" height="360"> <figcaption>Invariant broken</figcaption>
     <p>This can be fixed by adding a minimum fee check after the fee calculation, if fee < 0.1 BIPS, fee = 0.1 BIPS.</p>
     <h2 id="-context-">Lesson</h2>
-    <p>The incorrect quadratic formula bug was a solo medium, my first one in cantina, and the extra bug had a single duplicate. The alpha here is that a lot of SRs are either skipping or not fully understanding complex mathematical equations, leaving plenty of opportunities on the table. But if you read this article carefully, you'll notice that I don't actually had to run the numbers inside the equation to find the bug. Instead, all I had to do was convert the function to python and analyze it with custom parameters. This is a practice I've added to my auditing method when dealing with heavy mathematics, or functions with excessive amounts of branch pathing. Many veteran auditors deal with these situations in their own way, <a href="https://x.com/jack__sanford/status/1998003375070142902">phil uses a spreadsheet, 0x52 keeps in his head somehow</a>. Regardless, you need to have a plan of action for these occasions, unless you wanna be left behind.</p>
+    <p>The incorrect quadratic formula bug was a solo medium, and the extra bug had a single duplicate. The alpha here is that a lot of SRs are either skipping or not fully understanding complex mathematical equations, leaving plenty of opportunities on the table. But if you read this article carefully, you'll notice that I didn't actually had to run the numbers inside the equation to find the bug, but rather, converted the function to python and analyzed it with my parameters of choice. </p> 
+    <p>To find the issue without plotting, you'd have to realize by yourself that 1) there's an invariant that the fee transition must be continuous at all points and 2) verify this invariant for reserves off reference. Creating this notebook ended up as a shortcut to both. This is a practice I've included to my auditing method when dealing with heavy mathematics, or functions with excessive amounts of branch pathing. Many veteran auditors deal with these situations in their own way, <a href="https://x.com/jack__sanford/status/1998003375070142902">phil uses a spreadsheet, 0x52 keeps in his head somehow</a>. Regardless, you need to have a plan of action for these occasions, unless you wanna miss them on purpose.</p>
     <p></p>
     <a href="index">return</a>
     </body>
+
 
 
 
