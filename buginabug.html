@@ -19,6 +19,49 @@
     <p>Ammalgam is both an AMM and a lending protocol. The idea is they use the same liquidity for both, which allows for higher yield for LPs. In order to not break everything, they have to keep track of a usage rate. Whenever the rate is too high, swaps are charged are significantly higher fee.</p>
     <p>Imagine a pool with 100 ETH and 200k USDC, and in a single block most of the ETH was sold for USDC. To prevent market manipulation (MEV, flash swaps, gigadumping shitcoins, etc) they set the reserves at the start of the block as reference, and charge a fee based on how far from them your swap will leave the pool. They use 3 calculations to charge the fee depending on the state of the reserves. </p>
     <p>If your swap brings the current reserves back to reference, you are charged the lowest fee allowed, 0.1 BIPS. If you're swapping away from the reserves, you are charged a complex quadratic equation up to 4000 BIPS. Past this point you reach the final level, where the fee growth becomes linear and you're charged > 4000. </p>
+    <p>See if you can spot the issue yourself.</p>
+    <button id="toggleBtn">Show code</button>
+
+<pre id="bugcode" style="display:none"> function calculateSwapFeeBipsQ64( uint256 input, uint256 referenceReserve, uint256 currentReserve ) internal pure returns (uint256 fee) { if (input == 0) {
+            return 0;
+        }
+        if (currentReserve < referenceReserve) {
+            // We are moving back towards the price
+            if (input + currentReserve > referenceReserve) {
+                // the input moves from the current reserve past the starting reserve, we charge a
+                // weighted fee based on how far past the starting reserve we are
+                uint256 pastBy = input + currentReserve - referenceReserve;
+                if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+                    // This swap has moved beyond the max quadratic fee
+                    fee = MAX_QUADRATIC_FEE_PERCENT_BIPS
+                        * (TWO_Q64 - Convert.mulDiv(referenceReserve, MAX_QUADRATIC_FEE_Q64, N * pastBy, false));
+                } else {
+                    // this fee is still in the quadratic range
+                    fee = Convert.mulDiv(N_TIMES_BIPS_Q64_PER_PERCENT, pastBy, referenceReserve, false);
+                }
+                fee = Convert.mulDiv(fee, pastBy, input, false);
+            } else {
+                // we have not reached the starting reserve, we charge the minimum fee
+                fee = QuadraticSwapFees.MIN_FEE_Q64;
+            }
+        } else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+            // This swap passes beyond the max quadratic fee
+            fee = MAX_QUADRATIC_FEE_PERCENT_BIPS
+                * (
+                    TWO_Q64
+                        - Convert.mulDiv(
+                            referenceReserve,
+                            MAX_QUADRATIC_FEE_Q64,
+                            N * (input + 2 * (currentReserve - referenceReserve)),
+                            false
+                        )
+                );
+        } else {
+            // this swap is still in the quadratic range
+            fee = Convert.mulDiv(
+                N_TIMES_BIPS_Q64_PER_PERCENT, 2 * (currentReserve - referenceReserve) + input, referenceReserve, false
+            );
+        } } </pre> <script> const btn = document.getElementById('toggleBtn'); const pre = document.getElementById('bugcode'); btn.addEventListener('click', () => { const hidden = pre.style.display === 'none'; pre.style.display = hidden ? 'block' : 'none'; btn.textContent = hidden ? 'Hide code' : 'Show code'; }); </script>
     <h2 id="-the-bug-">Bug</h2>
     <p>This graph shows the base case: First swap in a pool, selling ETH for USDC. The X axis is the size of the input, and the Y axis the fee in BIPS. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
     <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st swap</figcaption>
@@ -90,6 +133,7 @@
     <p></p>
     <a href="index">return</a>
     </body>
+
 
 
 
