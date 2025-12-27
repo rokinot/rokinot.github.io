@@ -1,0 +1,100 @@
+<head>
+    <title>ping pong</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </head>
+    <style>
+    p {
+            text-align: start;
+    }
+            
+    </style>
+    <body>
+    <img src="continuous.svg"/><figcaption></figcaption>
+    <p>find the contest
+    <a href="https://cantina.xyz/code/076935b1-2706-48c6-bf0a-b3656aa24194/overview">here</a>
+    </p>
+    <h2 id="-context-">Context</h2>
+    <p>The scope of this contest was the Metropolis liquidity book vaults. Since this system is completely untied to other kinds of vaults made by metropolis, we assume its a whole new project. The vaults here are smart contracts that manage liquidity into DLMM pools, the pair pools made by Trader Joe's. You can think of an DLMM as almost the same as an Uniswap V3 pool, except the fee composition is different. </p>
+    <p>When adding liquidity to a DLMM, if you add it to the current price point, with an unbalanced amount of funds (more X than Y), you are charged a composition fee. 25% of it goes to the protocol, 75% to the previous LPs. The amount of fees to be paid depends both on how much imbalance is added and the size of funds currently available in the tick. So to maximize the amount of fees paid, you have to provide liquidity to one asset only.</p>
+    <p>A concern the sponsor had was to make sure there would have no faulty points, as many vault users were bots made w/ AI (or vibe coded as they say). </p>
+
+    <h2 id="-the-bug-">Bug</h2>
+    <p>This graph shows the base case: First swap in a pool, selling ETH for USDC. The X axis is the size of the input, and the Y axis the fee in BIPS. The red line highlights the point where the code switches from quadratic to linear. The function HAS to be continuous, which means both the quadratic and linear fee calculation have to return 4000 BIPS at the transition point.</p>
+    <img src="/ammalgam1.png" alt="ammalgam10" width="640" height="360"> <figcaption>1st swap</figcaption>
+    <p>However, this is what it looks like when the reserves are off reference, for the 2nd swap in a block onwards: </p>
+    <img src="/ammalgam2.png" alt="ammalgam11" width="640" height="360"> <figcaption>2nd swap</figcaption>
+    <p>To find this, I took the fee calculation below and converted to python. Then by changing some parameters and plotting, I was able to visualize that the transition point is not achieved at 4000 BIPS, but much later instead. All the plots you're in this post were made in that notebook.</p>
+    <p>But when I was writing the PoC for the bug, when comparing the fee charged in a swap vs the pure function, the numbers were completely off. This is when I found out the first issue:</p>
+    <pre><code> 
+    uint256 fee = QuadraticSwapFees.calculateSwapFeeBipsQ64(amountIn, reserve, referenceReserve);
+    </code></pre>
+    <pre><code> 
+    function calculateSwapFeeBipsQ64(
+        uint256 input,
+        uint256 referenceReserve,
+        uint256 currentReserve
+    ) internal pure returns (uint256 fee) {
+    </code></pre>
+    <p>The order of the parameters are wrong, this is why the graphics were so off (I thought) and why my PoCs were giving me nightmares. This was the 1st submitted bug, very simple, had 11 duplicates, took 10 minutes to write that report. An AI could easily have found this.</p>
+    <p>Knowing this bug, we go back to the notebook and pass the *correct* parameters instead. We now see the issue remains, but get a glimpse of what the real bug looks like:</p>
+    <img src="/ammalgam2real.png" alt="ammalgam22" width="640" height="360"> <figcaption>2nd swap, correct parameters</figcaption>
+    <p>For the 2nd swap onwards, the fee function is NOT continuous. This breaks a key invariant, if users knew this they could purposefully trade away from the reserves in order to be charged less rather than more. </p>
+    <p>Looking at the code we find out why that happens. The line below is an if block inside the calculateSwapFeeBipsQ64 function that determines whether the swap has left the quadratic range.</p>
+    <pre><code>...
+} else if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+    // This swap passes beyond the max quadratic fee
+    fee = MAX_QUADRATIC_FEE_PERCENT_BIPS * (
+        TWO_Q64 - Convert.mulDiv(
+                referenceReserve,
+                MAX_QUADRATIC_FEE_Q64,
+                N * (input + 2 * (currentReserve - referenceReserve)),
+                false
+            )
+    );
+...</code></pre>
+    <p>This works for the 1st swap because \(currentReserve = referenceReserve\). But for the case where \(currentReserve > referenceReserve\), this `if` block is checking whether we surpassed the threshold using the `input` and the current state of the reserve.</p>
+    <p>To find out mathematically when the code should enter this block, we need to find the `input` to the linear formula that returns 4000 BIPS. This happens when the fee equals `MAX_QUADRATIC_FEE_PERCENT_BIPS`. To reach this value, the `mulDiv` block must be equal to one, which means the dividend and divisor must be equal.</p>
+    <p>This gives us the equation:</p>
+    <p>$$1 = \frac{referenceReserve \times MAX\_QUADRATIC\_FEE\_Q64}{N \times (input + 2 \times (currentReserve - referenceReserve))}$$</p>
+    <p>Since \(MAX\_QUADRATIC\_FEE\_Q64\) is 40 in Q64, we can simplify the constants:</p>
+    <p>$$1 = \frac{referenceReserve \times 40}{20 \times (input + 2 \times (currentReserve - referenceReserve))}$$</p>
+    <p>Solving for the denominator gives us:</p>
+    <p>$$input + 2 \times (currentReserve - referenceReserve) = referenceReserve \times 2$$</p>
+    <p>In terms of `LINEAR_START_REFERENCE_SCALER` (which equals 3), we get:</p>
+    <p>$$input + (currentReserve - referenceReserve) + referenceReserve$$</p>
+    <p>$$    = LINEAR_START_REFERENCE_SCALER \times referenceReserve$$</p>
+    <p>Which is different from the condition in the code. The current code is missing the second term, which causes it to enter the linear equation too late creating the discontinuity. The fix is to use the correct if comparison. Below I show a graph comparing the original formula and the fixed one, notice that the function becomes much smoother.</p>
+    <img src="/ammalgamfinal.png" alt="ammalgamfixed" width="640" height="360"> <figcaption>Fixed vs Original. In blue, the original. In orange, the linear formula applied at all BIPS. In green, the correct one. The red line highlights where the current code switches to linear.</figcaption>
+    <h2 id="-extra-">Extra</h2>
+    <p>Since I had a pretty good notebook setup already, I decided to run an invariant check. Was it possible for the fee to be lower than the minimum allowed? To do this, we start with a current reserve lower than reference and check if the graph at any point has reached a BIPS lower than 0.1. As it turns out, the invariant was broken.</p>
+    <pre><code>
+            if (input + currentReserve > referenceReserve) {
+                // the input moves from the current reserve past the starting reserve, we charge a
+                // weighted fee based on how far past the starting reserve we are
+                uint256 pastBy = input + currentReserve - referenceReserve;
+                if (input + currentReserve > referenceReserve * LINEAR_START_REFERENCE_SCALER) {
+                    ...
+                } else {
+                    // this fee is still in the quadratic range
+                    fee = Convert.mulDiv(N_TIMES_BIPS_Q64_PER_PERCENT, pastBy, referenceReserve, false);
+                }
+                fee = Convert.mulDiv(fee, pastBy, input, false);
+    </code></pre>
+    <p>This is the portion of the code that goes from minimum to quadratic. The problem here is that if the reference is too close to current reserve, pastBy will be ~ input. If the input brings the reserves back to balance, the fee rounds to zero.</p>
+    <img src="/ammalgaminvariant.png" alt="ammalgaminvariant" width="640" height="360"> <figcaption>Invariant broken</figcaption>
+    <p>This can be fixed by adding a minimum fee check after the fee calculation, if fee < 0.1 BIPS, fee = 0.1 BIPS.</p>
+    <h2 id="-context-">Lesson</h2>
+    <p>This finding had a single duplicate, and earned me about $1800. Something I particularly like about this one, is that its an occasion where the most valuable finding was also the most impactful. </p> 
+    <p></p>
+    <a href="index">return</a>
+    </body>
+
+
+
+
+
+
+
+
