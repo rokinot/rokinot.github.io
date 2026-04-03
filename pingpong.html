@@ -35,39 +35,32 @@
         <li>Repeat indefinitely</li>
     </ol>
     
-    <img src="/images/pingpong_attack.gif" alt="ping-pong-attack" width="640" height="360"> <figcaption>One complete ping-pong cycle showing the attacker collecting fees as they move the price between bins</figcaption>
+    <img src="/pingpong_attack.gif" alt="ping-pong-attack" width="640" height="360"> <figcaption>One complete ping-pong cycle showing the attacker collecting fees as they move the price between bins</figcaption>
     
     <h2 id="-impact-">Impact</h2>
     <p>My PoC demonstrated a vault with 100k USD in user deposits (50k USDC + equivalent in AVAX). The operator collects ~150 USDC per cycle or 0.15% of vault funds. </p>
     
     <p>At this rate, after \(n\) cycles, the vault value follows an exponential decay:</p>
     
-    <p>$$V(n) = 100K_USDC \times (1 - 0.0015)^n = V_0 \times (0.9985)^n$$</p>
+    <p>$$V(n) = 100K USDC \times (1 - 0.0015)^n = V_0 \times (0.9985)^n$$</p>
     
-    <p>This means:</p>
+    <p>The amount extracted will look like this</p>
     <ul>
-        <li>After 500 cycles: \(V(500) \approx 47,000\) USD (~47% remains)</li>
-        <li>After 1000 cycles: \(V(1000) \approx 22,000\) USD (~22% remains)</li>
-        <li>On networks like Sonic with negligible gas costs and 1M block limit, the operator can execute hundreds of these cycles per block</li>
+        <li>After 100 cycles: \(V(100) \approx 86,000\) USD (~14% drained)</li>
+        <li>After 500 cycles: \(V(500) \approx 47,000\) USD (~47% drained)</li>
+        <li>After 1000 cycles: \(V(1000) \approx 22,000\) USD (~78% drained)</li>
     </ul>
+
+    <p>Since each cycle requires several external calls with non trivial internal operations, the gas consumed is very high, about ~800k gwei per cycle. However, because the project was deployed on Sonic chain, the costs are negligible. I'm not sure this attack would work on mainnet, I didn't run the numbers honestly. This gif below shows the amount of funds remaining in the vault:</p>
     
-    <img src="/images/vault_drainage.gif" alt="vault-drainage" width="640" height="360"> <figcaption>Vault value declining over 120 rebalance cycles (each cycle = 0.15% loss)</figcaption>
-    
-    <h2 id="-root-cause-">Root Cause</h2>
-    <p>The vulnerability exists because:</p>
-    <ol>
-        <li>The `rebalance()` function has no cooldown or rate limiting</li>
-        <li>The operator (a trusted role) can call it unlimited times per block</li>
-        <li>Each rebalance call can trigger composition fees that flow to the attacker if they control the target bin</li>
-        <li>All transactions happen in the same block, so there's no timestamp-based recovery mechanism</li>
-    </ol>
+    <img src="/vault_drainage.gif" alt="vault-drainage" width="640" height="360"> <figcaption>Vault value declining over 120 rebalance cycles at 0.15% per cycle</figcaption>
     
     <h2 id="-the-fix-">The Fix</h2>
-    <p>The recommended fix is simple: add a cooldown to the `rebalance()` function. For example, enforce that rebalances can only happen once per N blocks or once per timestamp epoch. This prevents the operator from ping-ponging the price multiple times per block to extract repeated fees.</p>
+    <p>The fix is actually not that trivial, but there's one that can work due to game theory. Increase the vault cooldown to at least a few hours. The results is that, although the attack would be possible in theory, in practice it would take several weeks to pull a significant profit, but the vault itself would be wildly unprofitable for prolonged amounts of times, causing users to leave it for more successful ones, which would have more honest operators. </p>
+
     <h2 id="-lesson-">Lesson</h2>
-    <p>This finding earned 1876.62 on Cantina and had a high impact. What's interesting about this vulnerability is that it exposes a critical interaction between two normally-safe features: (1) the operator's ability to call `rebalance()` and (2) the DLMM's composition fee mechanism.</p>
+    <p>This finding was responsible for getting me the 1st place in the contest. What's important to take off from this, is the fact Trader Joe's DLMM pools were out of scope for the contest, but this vault contract still had issues with it. It is impossible to find this bug without auditing the DLMM pools. Now, see, bugs in external integrations are a pattern you will seldom encounter, but as far as contests goes, it is BY FAR the most +EV types of bugs, the ones very few people catch (simao has a student that earned almost 10k for a bug related to external dependencies, said student only had between 1-2k total earnings from contests before that point). If you are participating in a contest, or even a bug bounty, you NEED to audit those third party integrations, regardless of what the scope says. </p>
     
-    <p>The vulnerability highlights the importance of auditing access controls + state-changing functions together. The operator role existed for legitimate purposes, but without rate limiting, it became a money pump when combined with the ability to ping-pong prices across bins.</p>
     <a href="index">return</a>
     </body>
 
