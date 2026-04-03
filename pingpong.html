@@ -18,7 +18,7 @@
     <h2 id="-context-">Context</h2>
     <p>The scope of this contest was the Metropolis liquidity book vault contracts. Since this system is completely untied to other kinds of vaults made by metropolis, we assume its a whole new project. The vaults here are smart contracts that manage liquidity into DLMM pools, the pair pools made by Trader Joe's. You can think of an DLMM as almost the same as an Uniswap V3 pool, except the fee composition is different. Bear in mind that DLMM pools were <b>out of scope</b>. </p>
     <p>When adding liquidity to a DLMM, if you add it to the current price point, with an unbalanced amount of funds (more X than Y), you are charged a composition fee. 25% of it goes to the protocol, 75% to the previous LPs. The amount of fees to be paid depends both on how much imbalance is added and the size of funds currently available in the tick. So to maximize the amount of fees paid, you have to provide liquidity to one asset only.</p>
-    <p>The vault is managed by an operator, who's an account that creates the vault and that calls the rebalance() function to adjust the vault's liquidity positions in the DLMM. The amount of vault funds, as well as ratio of tokens added to each bin can be arbitrarily set by them, and the goal of these vaults is to maximize the trading fees collected with user supplied funds + yield that comes from liquidity mining.</p>
+    <p>The vault is managed by an operator, who's the creator of the vault and its manager. The operator's job is to call the rebalance() function to adjust the vault's liquidity positions in the DLMM. The amount of vault funds, as well as ratio of tokens added to each bin can be arbitrarily set by them, and the goal of these vaults is to maximize the trading fees collected with user supplied funds + yield that comes from liquidity mining.</p>
     <p>A concern the sponsor had was to make sure there would have no faulty points, as many vault users were vibe coded bots (back in early 25 these bots were really trash). </p>
 
     <h2 id="-the-bug-">Bug</h2>
@@ -52,7 +52,9 @@
         <li>After 1000 cycles: \(V(1000) \approx 22,000\) USD (~78% drained)</li>
     </ul>
 
-    <p>Since each cycle requires several external calls with non trivial internal operations, the gas consumed is very high, about ~800k gwei per cycle. However, because the project was deployed on Sonic chain, the costs are negligible. I'm not sure this attack would work on mainnet, I didn't run the numbers honestly. This gif below shows the amount of funds remaining in the vault:</p>
+    <p>Since each cycle requires several external calls with non trivial internal operations, the gas consumed is very high, about ~800k gwei per cycle. However, because the project was deployed on Sonic chain, the costs are negligible.</p>
+
+    <p>This entire operation can be executed in a single block. The number of times required to drain a certain % of the vault varies based on the configured fee in the pool. This gif shows the amount of funds remaining in the vault:</p>
     
     <img src="/vault_drainage.gif" alt="vault-drainage" width="640" height="360"> <figcaption>Vault value declining over 120 rebalance cycles at 0.15% per cycle</figcaption>
     
