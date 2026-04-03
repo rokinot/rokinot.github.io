@@ -11,7 +11,7 @@
             
     </style>
     <body>
-    <img src="continuous.svg"/><figcaption></figcaption>
+    <img src="pingpong.png"/><figcaption></figcaption>
     <p>find the contest
     <a href="https://cantina.xyz/code/076935b1-2706-48c6-bf0a-b3656aa24194/overview">here</a>
     </p>
@@ -21,27 +21,33 @@
     <p>A concern the sponsor had was to make sure there would have no faulty points, as many vault users were vibe coded bots (back in early 25 these bots were really trash). </p>
 
     <h2 id="-the-bug-">Bug</h2>
-    <p>If we assume the operator is malicious, there is a complex series of calls he can do in order to steal all the funds in the vault. First, they provide LP between 2 price bins, enough to be a majority LP in both bins. Then the attack unfolds as follows:</p>
+    <p>If we assume the operator is malicious, there is a complex series of calls he can do in order to steal a large percentage of the funds in the vault. First, you provide most of the liquidity between 2 price bins, which will be heavily skewed towards one side. Then the attack unfolds as follows:</p>
     
     <ol>
-        <li>Vault rebalances and deposits into the current active bin where attacker has most liquidity → attacker collects composition fees</li>
-        <li>Attacker burns their LP tokens, pocketing the fees</li>
-        <li>Vault rebalances again and withdraws most funds, leaving only a small amount</li>
-        <li>Attacker swaps tokens to move the price to the next adjacent bin (which they also control)</li>
-        <li>Vault rebalances again, depositing into the new active bin → attacker collects fees AGAIN</li>
-        <li>Repeat indefinitely, draining the vault 0.15% per cycle</li>
+        <li>You drag the price to one of the bins, works either upwards or downwards</li>
+        <li>As the operator, you rebalance the vault and cause it to deposit into the current active bin where you have most liquidity. Since the operator controls the ratio of assets, you force the vault to deposit 50/50, maximizing the fees paid to the LPs</li>
+        <li>You burn your LP tokens from the current bin, pocketing the composition fees (keeping your liquidity in the adjacent bin for the next cycle)</li>
+        <li>You rebalance the vault again and withdraws most funds, leaving only a small amount</li>
+        <li>You swap in the LP to move the price to the next adjacent bin, which you also control</li>
+        <li>You rebalance the vault once more, depositing into the new active bin, collecting composition fees AGAIN</li>
+        <li>You burn your LP tokens from this new bin, pocketing the fees</li>
+        <li>You provide fresh liquidity to the next adjacent bin</li>
+        <li>Repeat indefinitely</li>
     </ol>
     
     <img src="/images/pingpong_attack.gif" alt="ping-pong-attack" width="640" height="360"> <figcaption>One complete ping-pong cycle showing the attacker collecting fees as they move the price between bins</figcaption>
     
-    <p>The key insight is that the `rebalance()` function has no cooldown. The operator can call it multiple times in the same block, triggering composition fees each time.</p>
     <h2 id="-impact-">Impact</h2>
-    <p>To quantify the damage, the PoC demonstrates a vault with 100k USD in user deposits (50k USDC + equivalent AVAX). The operator collects approximately 150 USDC per cycle, representing 0.15% of vault funds.</p>
+    <p>My PoC demonstrated a vault with 100k USD in user deposits (50k USDC + equivalent in AVAX). The operator collects ~150 USDC per cycle or 0.15% of vault funds. </p>
     
-    <p>At this rate:</p>
+    <p>At this rate, after \(n\) cycles, the vault value follows an exponential decay:</p>
+    
+    <p>$$V(n) = 100K_USDC \times (1 - 0.0015)^n = V_0 \times (0.9985)^n$$</p>
+    
+    <p>This means:</p>
     <ul>
-        <li>500 cycles = ~47% of vault drained</li>
-        <li>1000 cycles = ~77% of vault drained</li>
+        <li>After 500 cycles: \(V(500) \approx 47,000\) USD (~47% remains)</li>
+        <li>After 1000 cycles: \(V(1000) \approx 22,000\) USD (~22% remains)</li>
         <li>On networks like Sonic with negligible gas costs and 1M block limit, the operator can execute hundreds of these cycles per block</li>
     </ul>
     
