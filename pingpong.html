@@ -16,8 +16,9 @@
     <a href="https://cantina.xyz/code/076935b1-2706-48c6-bf0a-b3656aa24194/overview">here</a>
     </p>
     <h2 id="-context-">Context</h2>
-    <p>The scope of this contest was the Metropolis liquidity book vaults. Since this system is completely untied to other kinds of vaults made by metropolis, we assume its a whole new project. The vaults here are smart contracts that manage liquidity into DLMM pools, the pair pools made by Trader Joe's. You can think of an DLMM as almost the same as an Uniswap V3 pool, except the fee composition is different. </p>
+    <p>The scope of this contest was the Metropolis liquidity book vault contracts. Since this system is completely untied to other kinds of vaults made by metropolis, we assume its a whole new project. The vaults here are smart contracts that manage liquidity into DLMM pools, the pair pools made by Trader Joe's. You can think of an DLMM as almost the same as an Uniswap V3 pool, except the fee composition is different. Bear in mind that DLMM pools were <b>out of scope</b>. </p>
     <p>When adding liquidity to a DLMM, if you add it to the current price point, with an unbalanced amount of funds (more X than Y), you are charged a composition fee. 25% of it goes to the protocol, 75% to the previous LPs. The amount of fees to be paid depends both on how much imbalance is added and the size of funds currently available in the tick. So to maximize the amount of fees paid, you have to provide liquidity to one asset only.</p>
+    <p>The vault is managed by an operator, who's an account that creates the vault and that calls the rebalance() function to adjust the vault's liquidity positions in the DLMM. The amount of vault funds, as well as ratio of tokens added to each bin can be arbitrarily set by them, and the goal of these vaults is to maximize the trading fees collected with user supplied funds + yield that comes from liquidity mining.</p>
     <p>A concern the sponsor had was to make sure there would have no faulty points, as many vault users were vibe coded bots (back in early 25 these bots were really trash). </p>
 
     <h2 id="-the-bug-">Bug</h2>
@@ -28,9 +29,9 @@
         <li>As the operator, you rebalance the vault and cause it to deposit into the current active bin where you have most liquidity. Since the operator controls the ratio of assets, you force the vault to deposit 50/50, maximizing the fees paid to the LPs</li>
         <li>You burn your LP tokens from the current bin, pocketing the composition fees (keeping your liquidity in the adjacent bin for the next cycle)</li>
         <li>You rebalance the vault again and withdraws most funds, leaving only a small amount</li>
-        <li>You swap in the LP to move the price to the next adjacent bin, which you also control</li>
-        <li>You rebalance the vault once more, depositing into the new active bin, collecting composition fees AGAIN</li>
-        <li>You burn your LP tokens from this new bin, pocketing the fees</li>
+        <li>You swap in the LP to move the price to the next adjacent bin, that you also control</li>
+        <li>You rebalance again, depositing into the new active bin, collecting composition fees again</li>
+        <li>Burn your LP tokens from this new bin, pocketing the fees</li>
         <li>You provide fresh liquidity to the next adjacent bin</li>
         <li>Repeat indefinitely</li>
     </ol>
